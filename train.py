@@ -7,7 +7,6 @@ DATA_PATH = "car-price-api/cardekho_data (1).csv"  # put the csv in project root
 MODEL_PATH = "car-price-api/random_forest_model.pkl"
 COLS_PATH = "car-price-api/feature_columns.pkl"
 
-
 def main():
     df = pd.read_csv(DATA_PATH)
 

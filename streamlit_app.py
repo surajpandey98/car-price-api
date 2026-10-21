@@ -1,75 +1,117 @@
 import streamlit as st
 import requests
 
-st.set_page_config(page_title="Car Price Prediction", page_icon="🚗", layout="centered")
+API_URL="http://127.0.0.1:8000/predict"
 
-API_URL = (
-    "https://car-prediction-lpfl.onrender.com/predict"
-    or "http://127.0.0.1:8000/predict"
-)  # change if your endpoint differs
-
-st.title("🚗 Car Price Prediction")
-st.caption(
-    "This UI sends data to your FastAPI backend and shows predicted selling price."
+st.set_page_config(
+    page_title="Car Price Prediction",
+    page_icon="🚗",
+    layout="centered"
 )
 
-# --- Inputs (match your dataset columns exactly) ---
-car_name = st.text_input("Car_Name (e.g. swift, ritz, sx4)", value="swift")
+st.title("Car Price Prediction")
+st.write("Enter Your Car Details To Estimate Its Selling Price.")
 
-year = st.number_input("Year", min_value=1990, max_value=2026, value=2014, step=1)
+#st.divider()
 
-present_price = st.number_input(
-    "Present_Price (in lakhs)", min_value=0.0, value=5.59, step=0.1
-)
+#car details form
+with st.form("car_prediction_form"):
+    car_name=st.text_input(
+        "Car Name",
+        value="swift"
+    )
+    col1,col2=st.columns(2)
 
-kms_driven = st.number_input("Kms_Driven", min_value=0, value=40000, step=1000)
+    with col1:
+        year=st.number_input(
+            "Manufacturing Year",
+            min_value=1990,
+            max_value=2026,
+            value=2020,
+            step=1,
+            key="year"
+        )
+        present_price=st.number_input(
+            "Present Price",
+            min_value=0.01,
+            value=5.59,
+            step=0.1,
+            key="present_price"
+        )
+        kms_driven=st.number_input(
+            "Kilmeters Driven",
+            min_value=0,
+            value=25000,
+            step=1000,
+            key="kms_driven"
+        )
+    with col2:
+        fuel_type=st.selectbox(
+            "Fuel Type",
+            ["Petrol","Diesel","CNG"]
+        )
+        seller_type=st.selectbox(
+            "Seller Type",
+            ["Dealer","Individual"]
+        )
+        transmission=st.selectbox(
+            "TransmissionType",
+            ["Manual","Automatic"]
+        )
 
-fuel_type = st.selectbox("Fuel_Type", ["Petrol", "Diesel", "CNG"])
+    owner=st.selectbox(
+        "Number of Previous Owners",
+        [0,1,2,3]
+    )
+    submitted=st.form_submit_button(
+        "Predict Car Price",
+        use_container_width=True
+    )
 
-seller_type = st.selectbox("Seller_Type", ["Dealer", "Individual"])
+if submitted:
+    payload={
+        "Car_Name":car_name,
+        "Year":int(year),
+        "Present_Price":float(present_price),
+        "Kms_Driven":int(kms_driven),
+        "Fuel_Type":fuel_type,
+        "Seller_Type":seller_type,
+        "TransmissionType":transmission,
+        "Owner":int(owner)
+    }
 
-transmission = st.selectbox("Transmission", ["Manual", "Automatic"])
-
-# Owner is numeric in your dataset (0,1,3). Map UI labels to int.
-owner_label = st.selectbox(
-    "Owner", ["0 (First Owner)", "1 (Second Owner)", "3 (Third Owner)"]
-)
-owner = int(owner_label.split()[0])
-
-payload = {
-    "Car_Name": str(car_name),
-    "Year": int(year),
-    "Present_Price": float(present_price),
-    "Kms_Driven": int(kms_driven),
-    "Fuel_Type": str(fuel_type),
-    "Seller_Type": str(seller_type),
-    "Transmission": str(transmission),
-    "Owner": int(owner),
-}
-
-st.write("### Payload being sent:")
-st.json(payload)
-
-if st.button("Predict Price 💰"):
     try:
-        res = requests.post(API_URL, json=payload, timeout=20)
-        if res.status_code == 200:
-            data = res.json()
-
-            # adjust keys based on your API response
-            # common patterns: {"prediction": 3.45} or {"predicted_price": 3.45}
-            pred = data.get("prediction", data.get("predicted_price", None))
-
-            if pred is None:
-                st.warning(
-                    "API responded but prediction key not found. Full response below:"
-                )
-                st.json(data)
-            else:
-                st.success(f"✅ Predicted Selling Price: **₹ {pred:.2f} lakhs**")
+        with st.spinner("Predicting car price..."):
+            response=requests.post(
+                API_URL,
+                json=payload,
+                timeout=30
+            )
+        if response.status_code==200:
+            result=response.json()
+            predicted_price=result["prediction_price"]
+            st.success("Prediction completed successfully!")
+            st.subheader("Estimated Selling Price")
+            st.metric(
+                label="Predicted Price",
+                value=f"{predicted_price:.2f} lakhs"
+            )
+            st.caption(
+                "This is machine-learning estimate,"
+                "not a guaranted market price."
+            )
         else:
-            st.error(f"❌ API Error {res.status_code}")
-            st.code(res.text)
-    except requests.exceptions.RequestException as e:
-        st.error("❌ Could not connect to API. Is FastAPI running?")
-        st.code(str(e))
+            st.error(
+                f"API error({response.status_code}):"
+                f"{response.text}"
+            )
+    except requests.exceptions.ConnectionError:
+        st.error(
+            "Cannot connect to FastAPI."
+            "Start your FastAPI server and try again."
+        )
+    except requests.exceptions.Timeout:
+        st.error("The Prediction request timed out.")
+
+    except (ValueError,KeyError):
+        st.error("The API returned an unexpected response.")
